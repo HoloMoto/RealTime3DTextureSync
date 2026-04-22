@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WebTex — ホスト（3D）</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, sans-serif;
+      background: #0b1020;
+      color: #e2e8f0;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(280px, 340px) 1fr;
+      gap: 1rem;
+      padding: 1rem;
+      max-width: 1400px;
+      margin: 0 auto;
+      align-items: start;
+    }
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+    .panel {
+      background: #151c33;
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+    }
+    .panel h1 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin: 0 0 0.5rem;
+    }
+    .panel p { margin: 0.35rem 0; font-size: 0.85rem; color: #94a3b8; line-height: 1.5; }
+    #status { font-size: 0.9rem; color: #a5b4fc; margin-top: 0.75rem; }
+    #qr-wrap { margin: 1rem 0; display: flex; justify-content: center; }
+    #qr-canvas { border-radius: 8px; }
+    #room-id {
+      font-family: ui-monospace, monospace;
+      font-size: 0.8rem;
+      word-break: break-all;
+      color: #cbd5e1;
+    }
+    #phone-link { color: #818cf8; word-break: break-all; font-size: 0.75rem; }
+    #canvas3d {
+      width: 100%;
+      aspect-ratio: 16/10;
+      border-radius: 12px;
+      display: block;
+      background: #020617;
+    }
+    .steps { padding-left: 1.1rem; margin: 0.5rem 0 0; font-size: 0.82rem; color: #94a3b8; }
+    .steps li { margin: 0.25rem 0; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <div class="panel">
+      <h1>スマホを接続</h1>
+      <p>先にこのページを開いた状態で、QRをスマホで読み取ってください。</p>
+      <ol class="steps">
+        <li>このPCでこのページを開く</li>
+        <li>スマホでQRをスキャン（GitHub Pagesの <code>phone.html</code> が開きます）</li>
+        <li>カメラ許可 → 右の3Dに映像が貼り付きます</li>
+      </ol>
+      <p id="status">シグナリングを準備中…</p>
+      <div id="qr-wrap">
+        <canvas id="qr-canvas" width="220" height="220" aria-label="接続用QR"></canvas>
+      </div>
+      <p>ルーム ID: <span id="room-id"></span></p>
+      <p><a id="phone-link" href="#" rel="noopener"></a></p>
+    </div>
+    <div class="panel" style="padding: 0; overflow: hidden;">
+      <canvas id="canvas3d"></canvas>
+    </div>
+  </div>
+
+  <!-- スマホ用ページだけ GitHub Pages に置く場合: 下記に phone.html の完全URLを設定 -->
+  <script>
+    window.WEBTEX_PHONE_PAGE = '';
+  </script>
+  <script src="js/ice-config.js"></script>
+  <script src="https://unpkg.com/three@0.170.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+
+  <script>
+    (function () {
+      const canvas = document.getElementById('canvas3d');
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x020617);
+
+      const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+      camera.position.set(0, 0.6, 3.2);
+
+      const hemi = new THREE.HemisphereLight(0xffffff, 0x334455, 0.9);
+      scene.add(hemi);
+      const dir = new THREE.DirectionalLight(0xffffff, 0.5);
+      dir.position.set(2, 4, 3);
+      scene.add(dir);
+
+      const geom = new THREE.TorusKnotGeometry(0.65, 0.22, 160, 24);
+      const placeholder = new THREE.TextureLoader().load(
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+      );
+      const mat = new THREE.MeshStandardMaterial({
+        map: placeholder,
+        roughness: 0.35,
+        metalness: 0.15,
+      });
+      const mesh = new THREE.Mesh(geom, mat);
+      scene.add(mesh);
+
+      function resize() {
+        const w = canvas.clientWidth;
+        const h = canvas.clientHeight;
+        if (w === 0 || h === 0) return;
+        renderer.setSize(w, h, false);
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+      }
+      window.addEventListener('resize', resize);
+      resize();
+
+      const clock = new THREE.Clock();
+      function animate() {
+        requestAnimationFrame(animate);
+        const t = clock.getElapsedTime();
+        mesh.rotation.x = t * 0.31;
+        mesh.rotation.y = t * 0.42;
+        if (mat.map && mat.map.isVideoTexture) {
+          mat.map.needsUpdate = true;
+        }
+        renderer.render(scene, camera);
+      }
+      animate();
+
+      window.__webtexSetVideoStream = function (stream) {
+        const video = document.createElement('video');
+        video.playsInline = true;
+        video.muted = true;
+        video.autoplay = true;
+        video.srcObject = stream;
+        video.play().catch(function () {});
+
+        const tex = new THREE.VideoTexture(video);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.minFilter = THREE.LinearFilter;
+        tex.magFilter = THREE.LinearFilter;
+        if (mat.map && mat.map.dispose) mat.map.dispose();
+        mat.map = tex;
+        mat.needsUpdate = true;
+      };
+    })();
+  </script>
+  <script src="js/host-app.js"></script>
+</body>
+</html>
