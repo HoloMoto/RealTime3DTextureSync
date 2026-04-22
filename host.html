@@ -209,6 +209,15 @@
   <script>
     window.WEBTEX_PHONE_PAGE = '';
   </script>
+  <!-- OrbitControls が内部で bare import "three" を使うため必須（無いと 3D が一切動かない） -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.159.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.159.0/examples/jsm/"
+    }
+  }
+  </script>
   <script src="js/ice-config.js"></script>
   <script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
   <script src="js/qrcode.min.js"></script>
