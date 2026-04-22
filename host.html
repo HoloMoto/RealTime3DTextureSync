@@ -53,6 +53,11 @@
       border-radius: 12px;
       display: block;
       background: #020617;
+      touch-action: none;
+      cursor: grab;
+    }
+    #canvas3d:active {
+      cursor: grabbing;
     }
     .steps { padding-left: 1.1rem; margin: 0.5rem 0 0; font-size: 0.82rem; color: #94a3b8; }
     .steps li { margin: 0.25rem 0; }
@@ -78,6 +83,11 @@
       border-color: #818cf8;
       background: #312e81;
       color: #fff;
+    }
+    #btn-gyro.is-active {
+      border-color: #34d399;
+      background: #064e3b;
+      color: #ecfdf5;
     }
     .stage-wrap { position: relative; }
     .stage-toolbar {
@@ -174,7 +184,9 @@
         <button type="button" class="shape-btn is-active" id="shape-cube">キューブ</button>
         <button type="button" class="shape-btn" id="shape-sphere">球体</button>
       </div>
-      <p style="font-size:0.8rem;color:#64748b;margin:0.5rem 0 0;">スマホ同士なら右の「AR」でカメラ越しに3Dを重ね表示できます（対応端末のみ）。</p>
+      <p style="font-size:0.8rem;color:#64748b;margin:0.5rem 0 0;">
+        3Dはドラッグ／ピンチで視点変更。iPhone / iPad の Safari は <strong>WebXR AR 非対応</strong>のため「ジャイロ追従」を使ってください。Android Chrome では「ARモード」が使える場合があります。
+      </p>
       <p id="status">シグナリングを準備中…</p>
       <div id="qr-wrap" aria-label="接続用QR"></div>
       <p>ルーム ID: <span id="room-id"></span></p>
@@ -186,6 +198,7 @@
         <span class="shape-label" style="margin-left:0.35rem">形状</span>
         <button type="button" class="shape-btn is-active" id="shape-cube-tb">キューブ</button>
         <button type="button" class="shape-btn" id="shape-sphere-tb">球体</button>
+        <button type="button" id="btn-gyro">ジャイロ追従</button>
         <button type="button" id="btn-ar" disabled hidden>ARモード</button>
       </div>
       <canvas id="canvas3d"></canvas>
@@ -197,216 +210,9 @@
     window.WEBTEX_PHONE_PAGE = '';
   </script>
   <script src="js/ice-config.js"></script>
-  <!-- r170 以降は three.min.js が無いため、グローバル THREE 用に 0.159 を固定 -->
-  <script src="https://unpkg.com/three@0.159.0/build/three.min.js"></script>
   <script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
-  <!-- npm「qrcode」の toCanvas とは別物。qrcodejs（コンストラクタのみ）を同梱 -->
   <script src="js/qrcode.min.js"></script>
-
-  <script>
-    (function () {
-      const canvas = document.getElementById('canvas3d');
-      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-      renderer.xr.enabled = true;
-      renderer.outputColorSpace = THREE.SRGBColorSpace;
-
-      const scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x020617);
-
-      const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-      camera.position.set(0, 0.6, 3.2);
-
-      const hemi = new THREE.HemisphereLight(0xffffff, 0x334455, 0.9);
-      scene.add(hemi);
-      const dir = new THREE.DirectionalLight(0xffffff, 0.5);
-      dir.position.set(2, 4, 3);
-      scene.add(dir);
-
-      const placeholder = new THREE.TextureLoader().load(
-        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
-      );
-      const mat = new THREE.MeshStandardMaterial({
-        map: placeholder,
-        roughness: 0.35,
-        metalness: 0.15,
-      });
-      let currentShape = 'cube';
-      const meshRestPosition = new THREE.Vector3(0, 0, 0);
-      const meshArPosition = new THREE.Vector3(0, 1.45, -2.4);
-      let mesh = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 1.2), mat);
-      scene.add(mesh);
-
-      const cubeBtn = document.getElementById('shape-cube');
-      const sphereBtn = document.getElementById('shape-sphere');
-      const cubeTb = document.getElementById('shape-cube-tb');
-      const sphereTb = document.getElementById('shape-sphere-tb');
-
-      function updateShapeButtons() {
-        var c = currentShape === 'cube';
-        cubeBtn.classList.toggle('is-active', c);
-        sphereBtn.classList.toggle('is-active', !c);
-        cubeTb.classList.toggle('is-active', c);
-        sphereTb.classList.toggle('is-active', !c);
-      }
-
-      function setShape(kind) {
-        if (kind !== 'cube' && kind !== 'sphere') return;
-        if (kind === currentShape) return;
-        currentShape = kind;
-        mesh.geometry.dispose();
-        mesh.geometry =
-          kind === 'cube'
-            ? new THREE.BoxGeometry(1.2, 1.2, 1.2)
-            : new THREE.SphereGeometry(0.78, 48, 32);
-        updateShapeButtons();
-      }
-
-      cubeBtn.addEventListener('click', function () {
-        setShape('cube');
-      });
-      sphereBtn.addEventListener('click', function () {
-        setShape('sphere');
-      });
-      cubeTb.addEventListener('click', function () {
-        setShape('cube');
-      });
-      sphereTb.addEventListener('click', function () {
-        setShape('sphere');
-      });
-
-      const btnImmersive = document.getElementById('btn-immersive');
-      const btnExitImmersive = document.getElementById('btn-exit-immersive');
-      const btnAr = document.getElementById('btn-ar');
-
-      function setImmersive(on) {
-        document.body.classList.toggle('view-immersive', on);
-        btnImmersive.textContent = on ? '全面表示を終了' : '3D全面表示';
-      }
-
-      btnImmersive.addEventListener('click', function () {
-        setImmersive(!document.body.classList.contains('view-immersive'));
-      });
-      btnExitImmersive.addEventListener('click', function () {
-        setImmersive(false);
-      });
-      document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape' && document.body.classList.contains('view-immersive')) {
-          setImmersive(false);
-        }
-      });
-
-      let xrSession = null;
-      var savedSceneBackground = scene.background;
-
-      function applyARVisuals(active) {
-        if (active) {
-          scene.background = null;
-          renderer.setClearColor(0x000000, 0);
-        } else {
-          scene.background = savedSceneBackground;
-          renderer.setClearColor(0x000000, 1);
-        }
-      }
-
-      function bindARSessionEnd(session) {
-        session.addEventListener('end', function () {
-          xrSession = null;
-          mesh.position.copy(meshRestPosition);
-          applyARVisuals(false);
-        });
-      }
-
-      async function tryEnterAR() {
-        if (!navigator.xr) return;
-        var supported = false;
-        try {
-          supported = await navigator.xr.isSessionSupported('immersive-ar');
-        } catch (e) {
-          return;
-        }
-        if (!supported) {
-          window.alert('この端末・ブラウザは AR（immersive-ar）に対応していません。');
-          return;
-        }
-        try {
-          var session = await navigator.xr.requestSession('immersive-ar', {
-            requiredFeatures: ['local'],
-            optionalFeatures: ['dom-overlay', 'hit-test'],
-            domOverlay: { root: document.body },
-          });
-          xrSession = session;
-          applyARVisuals(true);
-          renderer.xr.setSession(session);
-          mesh.position.copy(meshArPosition);
-          bindARSessionEnd(session);
-        } catch (e1) {
-          try {
-            var session2 = await navigator.xr.requestSession('immersive-ar', {
-              requiredFeatures: ['local'],
-            });
-            xrSession = session2;
-            applyARVisuals(true);
-            renderer.xr.setSession(session2);
-            mesh.position.copy(meshArPosition);
-            bindARSessionEnd(session2);
-          } catch (e2) {
-            console.error(e2);
-            window.alert('AR を開始できませんでした（HTTPS・権限・端末を確認してください）。');
-          }
-        }
-      }
-
-      if (navigator.xr) {
-        navigator.xr.isSessionSupported('immersive-ar').then(function (ok) {
-          if (ok) {
-            btnAr.hidden = false;
-            btnAr.disabled = false;
-            btnAr.addEventListener('click', tryEnterAR);
-          }
-        });
-      }
-
-      function resize() {
-        const w = canvas.clientWidth;
-        const h = canvas.clientHeight;
-        if (w === 0 || h === 0) return;
-        renderer.setSize(w, h, false);
-        camera.aspect = w / h;
-        camera.updateProjectionMatrix();
-      }
-      window.addEventListener('resize', resize);
-      resize();
-
-      const clock = new THREE.Clock();
-      renderer.setAnimationLoop(function () {
-        const t = clock.getElapsedTime();
-        mesh.rotation.x = t * 0.31;
-        mesh.rotation.y = t * 0.42;
-        if (mat.map && mat.map.isVideoTexture) {
-          mat.map.needsUpdate = true;
-        }
-        renderer.render(scene, camera);
-      });
-
-      window.__webtexSetVideoStream = function (stream) {
-        const video = document.createElement('video');
-        video.playsInline = true;
-        video.muted = true;
-        video.autoplay = true;
-        video.srcObject = stream;
-        video.play().catch(function () {});
-
-        const tex = new THREE.VideoTexture(video);
-        tex.colorSpace = THREE.SRGBColorSpace;
-        tex.minFilter = THREE.LinearFilter;
-        tex.magFilter = THREE.LinearFilter;
-        if (mat.map && mat.map.dispose) mat.map.dispose();
-        mat.map = tex;
-        mat.needsUpdate = true;
-      };
-    })();
-  </script>
-  <script src="js/host-app.js"></script>
+  <script type="module" src="js/host-3d.js"></script>
+  <script defer src="js/host-app.js"></script>
 </body>
 </html>
