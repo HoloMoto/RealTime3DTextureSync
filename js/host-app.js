@@ -30,17 +30,20 @@
 
   roomEl.textContent = roomId;
 
-  QRCode.toCanvas(
-    document.getElementById('qr-canvas'),
-    phoneUrl,
-    { width: 220, margin: 2, color: { dark: '#0f172a', light: '#ffffff' } },
-    function (err) {
-      if (err) {
-        statusEl.textContent = 'QRの生成に失敗しました';
-        console.error(err);
-      }
-    }
-  );
+  try {
+    qrWrap.innerHTML = '';
+    new QRCode(qrWrap, {
+      text: phoneUrl,
+      width: 220,
+      height: 220,
+      colorDark: '#0f172a',
+      colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.H,
+    });
+  } catch (err) {
+    statusEl.textContent = 'QRの生成に失敗しました';
+    console.error(err);
+  }
 
   const linkEl = document.getElementById('phone-link');
   linkEl.href = phoneUrl;

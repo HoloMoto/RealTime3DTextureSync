@@ -69,9 +69,7 @@
         <li>カメラ許可 → 右の3Dに映像が貼り付きます</li>
       </ol>
       <p id="status">シグナリングを準備中…</p>
-      <div id="qr-wrap">
-        <canvas id="qr-canvas" width="220" height="220" aria-label="接続用QR"></canvas>
-      </div>
+      <div id="qr-wrap" aria-label="接続用QR"></div>
       <p>ルーム ID: <span id="room-id"></span></p>
       <p><a id="phone-link" href="#" rel="noopener"></a></p>
     </div>
@@ -85,9 +83,10 @@
     window.WEBTEX_PHONE_PAGE = '';
   </script>
   <script src="js/ice-config.js"></script>
-  <script src="https://unpkg.com/three@0.170.0/build/three.min.js"></script>
+  <!-- r170 以降は three.min.js が無いため、グローバル THREE 用に 0.159 を固定 -->
+  <script src="https://unpkg.com/three@0.159.0/build/three.min.js"></script>
   <script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
   <script>
     (function () {
