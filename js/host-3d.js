@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 
 const canvas = document.getElementById('canvas3d');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -43,6 +44,234 @@ const meshArPosition = new THREE.Vector3(0, 1.45, -2.4);
 let mesh = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 1.2), mat);
 scene.add(mesh);
 
+let displayMode = 'primitive';
+let objGroup = null;
+const objLoader = new OBJLoader();
+
+const originalMapByMaterial = new WeakMap();
+let lastVideoTexture = null;
+let lastMaterialWithVideo = null;
+
+const videoMaterialSelect = document.getElementById('video-material-select');
+const videoMaterialSelectTb = document.getElementById('video-material-select-tb');
+const objFileInput = document.getElementById('obj-file');
+const btnObjClear = document.getElementById('btn-obj-clear');
+
+function getDisplayObject() {
+  if (displayMode === 'obj' && objGroup) return objGroup;
+  return mesh;
+}
+
+function normalizeObject3D(object) {
+  object.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(object);
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  object.position.sub(center);
+  const maxDim = Math.max(size.x, size.y, size.z, 1e-6);
+  object.scale.setScalar(1.8 / maxDim);
+}
+
+function disposeObject3D(root) {
+  root.traverse(function (o) {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) {
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      mats.forEach(function (m) {
+        if (m.map && m.map !== lastVideoTexture) m.map.dispose();
+        m.dispose();
+      });
+    }
+  });
+}
+
+function clearObjModel() {
+  if (objGroup) {
+    lastMaterialWithVideo = null;
+    scene.remove(objGroup);
+    disposeObject3D(objGroup);
+    objGroup = null;
+  }
+  displayMode = 'primitive';
+  if (!mesh.parent) scene.add(mesh);
+  rebuildMaterialSelect();
+  restoreVideoToSelection();
+}
+
+function collectMaterialTargets() {
+  const list = [];
+  if (displayMode === 'primitive') {
+    list.push({
+      key: 'prim-0',
+      mesh: mesh,
+      matIndex: 0,
+      label: '標準形状（' + (currentShape === 'cube' ? 'キューブ' : '球体') + '）',
+    });
+    return list;
+  }
+  if (!objGroup) return list;
+  objGroup.traverse(function (o) {
+    if (!o.isMesh) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    mats.forEach(function (m, i) {
+      list.push({
+        key: o.uuid + '-' + i,
+        mesh: o,
+        matIndex: i,
+        label: (o.name || 'Mesh') + ' / ' + (m.name || 'material ' + (i + 1)),
+      });
+    });
+  });
+  return list;
+}
+
+function getSelectedMaterialKey() {
+  const v = videoMaterialSelect && videoMaterialSelect.value;
+  if (v) return v;
+  return videoMaterialSelectTb ? videoMaterialSelectTb.value : '';
+}
+
+function findTargetByKey(key) {
+  const targets = collectMaterialTargets();
+  for (let i = 0; i < targets.length; i++) {
+    if (targets[i].key === key) return targets[i];
+  }
+  return targets[0] || null;
+}
+
+function rebuildMaterialSelect() {
+  const targets = collectMaterialTargets();
+  const htmlSelects = [videoMaterialSelect, videoMaterialSelectTb].filter(Boolean);
+  htmlSelects.forEach(function (sel) {
+    sel.innerHTML = '';
+    targets.forEach(function (t) {
+      const opt = document.createElement('option');
+      opt.value = t.key;
+      opt.textContent = t.label;
+      sel.appendChild(opt);
+    });
+  });
+}
+
+function syncSelects(source, other) {
+  if (!source || !other) return;
+  other.value = source.value;
+}
+
+function getMaterialFromTarget(t) {
+  if (!t || !t.mesh) return null;
+  const mats = Array.isArray(t.mesh.material) ? t.mesh.material : [t.mesh.material];
+  return mats[t.matIndex] || null;
+}
+
+function restorePreviousVideoMap() {
+  if (lastMaterialWithVideo && originalMapByMaterial.has(lastMaterialWithVideo)) {
+    lastMaterialWithVideo.map = originalMapByMaterial.get(lastMaterialWithVideo);
+    lastMaterialWithVideo.needsUpdate = true;
+  } else if (lastMaterialWithVideo) {
+    lastMaterialWithVideo.map = null;
+    lastMaterialWithVideo.needsUpdate = true;
+  }
+  lastMaterialWithVideo = null;
+}
+
+function applyVideoTextureToSelection(tex) {
+  const key = getSelectedMaterialKey();
+  const t = findTargetByKey(key);
+  const m = getMaterialFromTarget(t);
+  if (!m) return;
+  if (!('map' in m)) {
+    console.warn('このマテリアルには map を設定できません');
+    return;
+  }
+  if (lastMaterialWithVideo && lastMaterialWithVideo !== m) {
+    restorePreviousVideoMap();
+  }
+  if (!originalMapByMaterial.has(m)) {
+    originalMapByMaterial.set(m, m.map || null);
+  }
+  m.map = tex;
+  m.needsUpdate = true;
+  lastMaterialWithVideo = m;
+}
+
+function restoreVideoToSelection() {
+  if (!lastVideoTexture) return;
+  restorePreviousVideoMap();
+  applyVideoTextureToSelection(lastVideoTexture);
+}
+
+function onMaterialTargetChanged() {
+  if (!lastVideoTexture) return;
+  restorePreviousVideoMap();
+  applyVideoTextureToSelection(lastVideoTexture);
+}
+
+if (videoMaterialSelect && videoMaterialSelectTb) {
+  videoMaterialSelect.addEventListener('change', function () {
+    syncSelects(videoMaterialSelect, videoMaterialSelectTb);
+    onMaterialTargetChanged();
+  });
+  videoMaterialSelectTb.addEventListener('change', function () {
+    syncSelects(videoMaterialSelectTb, videoMaterialSelect);
+    onMaterialTargetChanged();
+  });
+}
+
+rebuildMaterialSelect();
+
+async function loadObjFromFile(file) {
+  if (!file) return;
+  const text = await file.text();
+  let group;
+  try {
+    group = objLoader.parse(text);
+  } catch (e) {
+    console.error(e);
+    window.alert('OBJ の解析に失敗しました。');
+    return;
+  }
+  group.traverse(function (o) {
+    if (!o.isMesh) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    const converted = mats.map(function (old) {
+      if (old instanceof THREE.MeshStandardMaterial) return old;
+      const c = old.color ? old.color.getHex() : 0xcccccc;
+      return new THREE.MeshStandardMaterial({
+        color: c,
+        map: old.map || null,
+        roughness: 0.45,
+        metalness: 0.1,
+      });
+    });
+    o.material = converted.length === 1 ? converted[0] : converted;
+  });
+  normalizeObject3D(group);
+  clearObjModel();
+  scene.remove(mesh);
+  objGroup = group;
+  displayMode = 'obj';
+  scene.add(objGroup);
+  rebuildMaterialSelect();
+  restoreVideoToSelection();
+}
+
+if (objFileInput) {
+  objFileInput.addEventListener('change', function () {
+    const f = objFileInput.files && objFileInput.files[0];
+    if (f) loadObjFromFile(f);
+    objFileInput.value = '';
+  });
+}
+
+if (btnObjClear) {
+  btnObjClear.addEventListener('click', function () {
+    clearObjModel();
+    mesh.rotation.set(0, 0, 0);
+    mesh.position.copy(meshRestPosition);
+  });
+}
+
 const cubeBtn = document.getElementById('shape-cube');
 const sphereBtn = document.getElementById('shape-sphere');
 const cubeTb = document.getElementById('shape-cube-tb');
@@ -58,7 +287,10 @@ function updateShapeButtons() {
 
 function setShape(kind) {
   if (kind !== 'cube' && kind !== 'sphere') return;
-  if (kind === currentShape) return;
+  if (displayMode === 'obj') {
+    clearObjModel();
+  }
+  if (kind === currentShape && displayMode === 'primitive') return;
   currentShape = kind;
   mesh.geometry.dispose();
   mesh.geometry =
@@ -66,6 +298,8 @@ function setShape(kind) {
       ? new THREE.BoxGeometry(1.2, 1.2, 1.2)
       : new THREE.SphereGeometry(0.78, 48, 32);
   updateShapeButtons();
+  rebuildMaterialSelect();
+  restoreVideoToSelection();
 }
 
 cubeBtn.addEventListener('click', function () {
@@ -107,10 +341,11 @@ let gyroEnabled = false;
 
 function onDeviceOrientation(e) {
   if (!gyroEnabled || renderer.xr.isPresenting) return;
+  const o = getDisplayObject();
   const beta = THREE.MathUtils.degToRad(Math.min(90, Math.max(-90, e.beta || 0)));
   const gamma = THREE.MathUtils.degToRad(Math.min(90, Math.max(-90, e.gamma || 0)));
-  mesh.rotation.x = beta * 0.7;
-  mesh.rotation.y = gamma * 0.7;
+  o.rotation.x = beta * 0.7;
+  o.rotation.y = gamma * 0.7;
 }
 
 function setGyro(on) {
@@ -123,7 +358,7 @@ function setGyro(on) {
   }
   if (!on) {
     window.removeEventListener('deviceorientation', onDeviceOrientation, true);
-    mesh.rotation.set(0, 0, 0);
+    getDisplayObject().rotation.set(0, 0, 0);
   }
 }
 
@@ -171,7 +406,7 @@ function applyARVisuals(active) {
 
 function bindARSessionEnd(session) {
   session.addEventListener('end', function () {
-    mesh.position.copy(meshRestPosition);
+    getDisplayObject().position.copy(meshRestPosition);
     applyARVisuals(false);
     controls.enabled = !gyroEnabled;
   });
@@ -206,7 +441,7 @@ async function tryEnterAR() {
     });
     applyARVisuals(true);
     renderer.xr.setSession(session);
-    mesh.position.copy(meshArPosition);
+    getDisplayObject().position.copy(meshArPosition);
     bindARSessionEnd(session);
   } catch (e1) {
     try {
@@ -215,7 +450,7 @@ async function tryEnterAR() {
       });
       applyARVisuals(true);
       renderer.xr.setSession(session2);
-      mesh.position.copy(meshArPosition);
+      getDisplayObject().position.copy(meshArPosition);
       bindARSessionEnd(session2);
     } catch (e2) {
       console.error(e2);
@@ -259,8 +494,8 @@ renderer.setAnimationLoop(function () {
   if (!renderer.xr.isPresenting && controls.enabled) {
     controls.update();
   }
-  if (mat.map && mat.map.isVideoTexture) {
-    mat.map.needsUpdate = true;
+  if (lastVideoTexture) {
+    lastVideoTexture.needsUpdate = true;
   }
   renderer.render(scene, camera);
 });
@@ -277,7 +512,10 @@ window.__webtexSetVideoStream = function (stream) {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.minFilter = THREE.LinearFilter;
   tex.magFilter = THREE.LinearFilter;
-  if (mat.map && mat.map.dispose) mat.map.dispose();
-  mat.map = tex;
-  mat.needsUpdate = true;
+
+  if (lastVideoTexture && lastVideoTexture.dispose) {
+    lastVideoTexture.dispose();
+  }
+  lastVideoTexture = tex;
+  applyVideoTextureToSelection(tex);
 };

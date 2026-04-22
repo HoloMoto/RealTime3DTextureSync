@@ -61,6 +61,49 @@
     }
     .steps { padding-left: 1.1rem; margin: 0.5rem 0 0; font-size: 0.82rem; color: #94a3b8; }
     .steps li { margin: 0.25rem 0; }
+    .model-row {
+      margin-top: 0.75rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid rgba(148, 163, 184, 0.15);
+    }
+    .model-row label {
+      display: block;
+      font-size: 0.8rem;
+      color: #94a3b8;
+      margin-bottom: 0.35rem;
+    }
+    .model-row input[type="file"] {
+      font-size: 0.75rem;
+      max-width: 100%;
+    }
+    .model-row .row-btns {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-top: 0.5rem;
+      align-items: center;
+    }
+    .model-row button {
+      font: inherit;
+      font-size: 0.82rem;
+      padding: 0.35rem 0.65rem;
+      border-radius: 8px;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: #1e293b;
+      color: #e2e8f0;
+      cursor: pointer;
+    }
+    .model-row select {
+      width: 100%;
+      margin-top: 0.35rem;
+      padding: 0.45rem 0.5rem;
+      border-radius: 8px;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: #0f172a;
+      color: #e2e8f0;
+      font: inherit;
+      font-size: 0.82rem;
+    }
     .shape-bar {
       display: flex;
       flex-wrap: wrap;
@@ -184,6 +227,15 @@
         <button type="button" class="shape-btn is-active" id="shape-cube">キューブ</button>
         <button type="button" class="shape-btn" id="shape-sphere">球体</button>
       </div>
+      <div class="model-row">
+        <label for="obj-file">OBJモデル（.obj）</label>
+        <input type="file" id="obj-file" accept=".obj,text/plain" />
+        <div class="row-btns">
+          <button type="button" id="btn-obj-clear">標準形状に戻す</button>
+        </div>
+        <label for="video-material-select">映像テクスチャを貼るマテリアル</label>
+        <select id="video-material-select" aria-label="映像を貼るマテリアル"></select>
+      </div>
       <p style="font-size:0.8rem;color:#64748b;margin:0.5rem 0 0;">
         3Dはドラッグ／ピンチで視点変更。iPhone / iPad の Safari は <strong>WebXR AR 非対応</strong>のため「ジャイロ追従」を使ってください。Android Chrome では「ARモード」が使える場合があります。
       </p>
@@ -198,6 +250,8 @@
         <span class="shape-label" style="margin-left:0.35rem">形状</span>
         <button type="button" class="shape-btn is-active" id="shape-cube-tb">キューブ</button>
         <button type="button" class="shape-btn" id="shape-sphere-tb">球体</button>
+        <label class="shape-label" for="video-material-select-tb" style="margin-left:0.35rem">映像→</label>
+        <select id="video-material-select-tb" aria-label="映像を貼るマテリアル" style="max-width:11rem;font:inherit;font-size:0.75rem;padding:0.25rem 0.35rem;border-radius:6px;background:#0f172a;color:#e2e8f0;border:1px solid rgba(148,163,184,0.35)"></select>
         <button type="button" id="btn-gyro">ジャイロ追従</button>
         <button type="button" id="btn-ar" disabled hidden>ARモード</button>
       </div>
