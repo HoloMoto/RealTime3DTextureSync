@@ -11,7 +11,8 @@
 
   let localStream = null;
   let videoSender = null;
-  let useBackCamera = false;
+  /** 既定: アウトカメ（背面） */
+  let useBackCamera = true;
 
   function setStatus(msg) {
     statusEl.textContent = msg;
@@ -59,6 +60,7 @@
     if (btnCameraToggle) {
       btnCameraToggle.disabled = true;
       btnCameraToggle.onclick = null;
+      btnCameraToggle.removeEventListener('click', onCameraToggleClick);
     }
     if (pc) {
       pc.onicecandidate = null;
@@ -77,7 +79,7 @@
     });
   }
 
-  function facingConstraint() {
+  function facingModeValue() {
     return useBackCamera ? 'environment' : 'user';
   }
 
@@ -90,42 +92,81 @@
     }
   }
 
+  /**
+   * 多くの端末では「既にカメラ使用中」のまま別の getUserMedia を掛けると失敗するため、
+   * exact → ideal → ラベル無し の順で試す。
+   */
   async function acquireStream() {
-    return navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { ideal: facingConstraint() },
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
+    const facing = facingModeValue();
+    const attempts = [
+      {
+        video: {
+          facingMode: { exact: facing },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
       },
-      audio: false,
-    });
+      {
+        video: {
+          facingMode: { ideal: facing },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      },
+      {
+        video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      },
+      { video: true, audio: false },
+    ];
+    var lastErr = null;
+    for (var i = 0; i < attempts.length; i++) {
+      try {
+        return await navigator.mediaDevices.getUserMedia(attempts[i]);
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error('getUserMedia failed');
   }
 
-  async function switchFacing() {
-    if (!pc || !localStream) return;
+  async function onCameraToggleClick(ev) {
+    if (ev) ev.preventDefault();
+    if (!pc || !localStream || !videoSender) return;
+
     useBackCamera = !useBackCamera;
     updateCameraUi();
+
+    localStream.getTracks().forEach(function (t) {
+      t.stop();
+    });
+
     try {
       const next = await acquireStream();
       const vtrack = next.getVideoTracks()[0];
+      await videoSender.replaceTrack(vtrack);
       preview.srcObject = next;
-      localStream.getTracks().forEach(function (t) {
-        t.stop();
-      });
       localStream = next;
-      if (videoSender) {
-        await videoSender.replaceTrack(vtrack);
-      }
     } catch (e) {
       console.error(e);
       useBackCamera = !useBackCamera;
       updateCameraUi();
-      setStatus('このカメラは使えません。もう一度お試しください。');
+      try {
+        const fallback = await acquireStream();
+        await videoSender.replaceTrack(fallback.getVideoTracks()[0]);
+        preview.srcObject = fallback;
+        localStream = fallback;
+      } catch (e2) {
+        console.error(e2);
+        setStatus('カメラ切替に失敗しました。ページを再読み込みしてください。');
+      }
     }
   }
 
   async function startCameraAndCall() {
-    useBackCamera = false;
+    useBackCamera = true;
     updateCameraUi();
 
     const stream = await acquireStream();
@@ -142,9 +183,7 @@
 
     if (btnCameraToggle) {
       btnCameraToggle.disabled = false;
-      btnCameraToggle.onclick = function () {
-        switchFacing();
-      };
+      btnCameraToggle.addEventListener('click', onCameraToggleClick);
     }
 
     pc.onicecandidate = function (ev) {
