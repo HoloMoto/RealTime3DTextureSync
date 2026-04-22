@@ -6,6 +6,12 @@
 
   const statusEl = document.getElementById('status');
   const preview = document.getElementById('preview');
+  const btnCameraToggle = document.getElementById('btn-camera-toggle');
+  const cameraLabelEl = document.getElementById('camera-label');
+
+  let localStream = null;
+  let videoSender = null;
+  let useBackCamera = false;
 
   function setStatus(msg) {
     statusEl.textContent = msg;
@@ -43,6 +49,17 @@
       clearInterval(offerInterval);
       offerInterval = null;
     }
+    if (localStream) {
+      localStream.getTracks().forEach(function (t) {
+        t.stop();
+      });
+      localStream = null;
+    }
+    videoSender = null;
+    if (btnCameraToggle) {
+      btnCameraToggle.disabled = true;
+      btnCameraToggle.onclick = null;
+    }
     if (pc) {
       pc.onicecandidate = null;
       pc.close();
@@ -60,17 +77,75 @@
     });
   }
 
-  async function startCameraAndCall() {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+  function facingConstraint() {
+    return useBackCamera ? 'environment' : 'user';
+  }
+
+  function updateCameraUi() {
+    if (cameraLabelEl) {
+      cameraLabelEl.textContent = useBackCamera ? 'アウトカメ（背面）' : 'インカメ（前面）';
+    }
+    if (btnCameraToggle) {
+      btnCameraToggle.textContent = useBackCamera ? 'インカメに切替' : 'アウトカメに切替';
+    }
+  }
+
+  async function acquireStream() {
+    return navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: facingConstraint() },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      },
       audio: false,
     });
+  }
+
+  async function switchFacing() {
+    if (!pc || !localStream) return;
+    useBackCamera = !useBackCamera;
+    updateCameraUi();
+    try {
+      const next = await acquireStream();
+      const vtrack = next.getVideoTracks()[0];
+      preview.srcObject = next;
+      localStream.getTracks().forEach(function (t) {
+        t.stop();
+      });
+      localStream = next;
+      if (videoSender) {
+        await videoSender.replaceTrack(vtrack);
+      }
+    } catch (e) {
+      console.error(e);
+      useBackCamera = !useBackCamera;
+      updateCameraUi();
+      setStatus('このカメラは使えません。もう一度お試しください。');
+    }
+  }
+
+  async function startCameraAndCall() {
+    useBackCamera = false;
+    updateCameraUi();
+
+    const stream = await acquireStream();
+    localStream = stream;
     preview.srcObject = stream;
 
     pc = new RTCPeerConnection({ iceServers: window.WEBTEX_ICE_SERVERS });
     stream.getTracks().forEach(function (t) {
       pc.addTrack(t, stream);
     });
+    videoSender = pc.getSenders().filter(function (s) {
+      return s.track && s.track.kind === 'video';
+    })[0] || null;
+
+    if (btnCameraToggle) {
+      btnCameraToggle.disabled = false;
+      btnCameraToggle.onclick = function () {
+        switchFacing();
+      };
+    }
 
     pc.onicecandidate = function (ev) {
       if (ev.candidate) {

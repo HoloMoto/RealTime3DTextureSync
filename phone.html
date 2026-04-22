@@ -33,12 +33,34 @@
       max-height: 70vh;
       object-fit: cover;
     }
+    .cam-bar {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      align-items: center;
+      margin: 0.75rem 0 0;
+    }
+    .cam-bar button {
+      font: inherit;
+      padding: 0.55rem 1rem;
+      border-radius: 10px;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: #1e293b;
+      color: #e2e8f0;
+      cursor: pointer;
+    }
+    .cam-bar button:active { opacity: 0.9; }
+    .cam-bar .hint { font-size: 0.8rem; color: #64748b; }
   </style>
 </head>
 <body>
   <h1>カメラ映像を送信中</h1>
   <p>PC側の3Dビューアに映像がテクスチャとして表示されます。このタブは閉じないでください。</p>
   <p id="status">準備中…</p>
+  <div class="cam-bar">
+    <button type="button" id="btn-camera-toggle" disabled>カメラ切替</button>
+    <span class="hint" id="camera-label">—</span>
+  </div>
   <div class="video-wrap">
     <video id="preview" playsinline autoplay muted></video>
   </div>

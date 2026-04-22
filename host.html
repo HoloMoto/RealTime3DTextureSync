@@ -56,6 +56,29 @@
     }
     .steps { padding-left: 1.1rem; margin: 0.5rem 0 0; font-size: 0.82rem; color: #94a3b8; }
     .steps li { margin: 0.25rem 0; }
+    .shape-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      align-items: center;
+      margin-top: 0.75rem;
+    }
+    .shape-label { font-size: 0.8rem; color: #94a3b8; margin-right: 0.25rem; }
+    .shape-btn {
+      font: inherit;
+      font-size: 0.82rem;
+      padding: 0.4rem 0.75rem;
+      border-radius: 8px;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: #1e293b;
+      color: #e2e8f0;
+      cursor: pointer;
+    }
+    .shape-btn.is-active {
+      border-color: #818cf8;
+      background: #312e81;
+      color: #fff;
+    }
   </style>
 </head>
 <body>
@@ -68,6 +91,11 @@
         <li>スマホでQRをスキャン（GitHub Pagesの <code>phone.html</code> が開きます）</li>
         <li>カメラ許可 → 右の3Dに映像が貼り付きます</li>
       </ol>
+      <div class="shape-bar">
+        <span class="shape-label">3D形状</span>
+        <button type="button" class="shape-btn is-active" id="shape-cube">キューブ</button>
+        <button type="button" class="shape-btn" id="shape-sphere">球体</button>
+      </div>
       <p id="status">シグナリングを準備中…</p>
       <div id="qr-wrap" aria-label="接続用QR"></div>
       <p>ルーム ID: <span id="room-id"></span></p>
@@ -86,7 +114,8 @@
   <!-- r170 以降は three.min.js が無いため、グローバル THREE 用に 0.159 を固定 -->
   <script src="https://unpkg.com/three@0.159.0/build/three.min.js"></script>
   <script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <!-- npm「qrcode」の toCanvas とは別物。qrcodejs（コンストラクタのみ）を同梱 -->
+  <script src="js/qrcode.min.js"></script>
 
   <script>
     (function () {
@@ -104,7 +133,6 @@
       dir.position.set(2, 4, 3);
       scene.add(dir);
 
-      const geom = new THREE.TorusKnotGeometry(0.65, 0.22, 160, 24);
       const placeholder = new THREE.TextureLoader().load(
         'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
       );
@@ -113,8 +141,36 @@
         roughness: 0.35,
         metalness: 0.15,
       });
-      const mesh = new THREE.Mesh(geom, mat);
+      let currentShape = 'cube';
+      let mesh = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 1.2), mat);
       scene.add(mesh);
+
+      const cubeBtn = document.getElementById('shape-cube');
+      const sphereBtn = document.getElementById('shape-sphere');
+
+      function updateShapeButtons() {
+        cubeBtn.classList.toggle('is-active', currentShape === 'cube');
+        sphereBtn.classList.toggle('is-active', currentShape === 'sphere');
+      }
+
+      function setShape(kind) {
+        if (kind !== 'cube' && kind !== 'sphere') return;
+        if (kind === currentShape) return;
+        currentShape = kind;
+        mesh.geometry.dispose();
+        mesh.geometry =
+          kind === 'cube'
+            ? new THREE.BoxGeometry(1.2, 1.2, 1.2)
+            : new THREE.SphereGeometry(0.78, 48, 32);
+        updateShapeButtons();
+      }
+
+      cubeBtn.addEventListener('click', function () {
+        setShape('cube');
+      });
+      sphereBtn.addEventListener('click', function () {
+        setShape('sphere');
+      });
 
       function resize() {
         const w = canvas.clientWidth;

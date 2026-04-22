@@ -1,3 +1,4 @@
+/* QR: qrcodejs は new QRCode(要素, { text }) のみ。npm「qrcode」の QRCode.toCanvas は未使用 */
 (function () {
   const brokerUrl = 'wss://broker.hivemq.com:8884/mqtt';
 
@@ -30,19 +31,24 @@
 
   roomEl.textContent = roomId;
 
-  try {
-    qrWrap.innerHTML = '';
-    new QRCode(qrWrap, {
-      text: phoneUrl,
-      width: 220,
-      height: 220,
-      colorDark: '#0f172a',
-      colorLight: '#ffffff',
-      correctLevel: QRCode.CorrectLevel.H,
-    });
-  } catch (err) {
-    statusEl.textContent = 'QRの生成に失敗しました';
-    console.error(err);
+  if (typeof QRCode !== 'function') {
+    statusEl.textContent =
+      'QRライブラリ未読込: js/qrcode.min.js を確認し、キャッシュを消して再読み込みしてください。';
+  } else {
+    try {
+      qrWrap.innerHTML = '';
+      new QRCode(qrWrap, {
+        text: phoneUrl,
+        width: 220,
+        height: 220,
+        colorDark: '#0f172a',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.H,
+      });
+    } catch (err) {
+      statusEl.textContent = 'QRの生成に失敗しました';
+      console.error(err);
+    }
   }
 
   const linkEl = document.getElementById('phone-link');
